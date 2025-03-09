@@ -8,7 +8,7 @@
 import Foundation
 
 /// Defines a type of window to detect and manage
-struct WindowType: Identifiable, Codable, Equatable {
+struct WindowType: Identifiable, Codable, Equatable, Hashable {
     /// Unique identifier
     var id: String
     
@@ -32,7 +32,7 @@ struct WindowType: Identifiable, Codable, Equatable {
     func matches(title: String, windowClass: String) -> Bool {
         guard enabled else { return false }
         
-        return matchesPattern(title, pattern: titlePattern) && 
+        return matchesPattern(title, pattern: titlePattern) &&
                matchesPattern(windowClass, pattern: classPattern)
     }
     
@@ -75,5 +75,10 @@ struct WindowType: Identifiable, Codable, Equatable {
     // Equatable implementation
     static func == (lhs: WindowType, rhs: WindowType) -> Bool {
         return lhs.id == rhs.id
+    }
+    
+    // Hashable implementation
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
     }
 }

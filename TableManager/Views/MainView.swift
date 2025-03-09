@@ -12,6 +12,9 @@ struct MainView: View {
     /// View model
     @StateObject private var viewModel = MainViewModel()
     
+    /// Selected view in sidebar
+    @State private var selectedSidebarItem: MainView.SidebarItem? = .configurations
+    
     /// Whether settings sheet is presented
     @State private var showingSettings = false
     
@@ -24,51 +27,200 @@ struct MainView: View {
     /// Name for new configuration
     @State private var newConfigName = ""
     
-    /// Current view selection in sidebar
-    @State private var selectedSidebarItem: MainView.SidebarItem = .configurations
-    
     var body: some View {
-        NavigationView {
+        mainContent
+            .sheet(isPresented: $showingNewConfigSheet) {
+                newConfigurationSheet
+            }
+            .sheet(isPresented: $showingWindowPicker) {
+                WindowPickerView(windowManager: viewModel.windowManager,
+                                 onWindowSelected: { windowType in
+                    viewModel.addWindowType(windowType)
+                })
+            }
+            .alert("Capture Layout", isPresented: $viewModel.isCaptureModeActive) {
+                captureLayoutAlertContent
+            } message: {
+                Text("Enter a name for the captured layout")
+            }
+    }
+    
+    // MARK: - Main Content Components
+    
+    /// Main container for the app UI
+    private var mainContent: some View {
+        HStack(spacing: 0) {
             // Sidebar
-            sidebar
+            sidebarContent
             
-            // Content
-            ZStack {
-                switch selectedSidebarItem {
-                case .configurations:
-                    if let configID = viewModel.activeConfigurationID,
-                       let config = viewModel.configurations.first(where: { $0.id == configID }) {
-                        ConfigurationView(configuration: config, viewModel: viewModel)
-                    } else {
-                        noConfigurationView
+            // Content area
+            contentArea
+        }
+    }
+    
+    /// Left sidebar content
+    private var sidebarContent: some View {
+        VStack(spacing: 0) {
+            // Header
+            sidebarHeader
+            
+            // List content
+            sidebarList
+        }
+        .frame(minWidth: 200)
+    }
+    
+    /// Sidebar header
+    private var sidebarHeader: some View {
+        HStack {
+            Text("Table Manager")
+                .font(.headline)
+            Spacer()
+        }
+        .padding()
+        .background(Color(.controlBackgroundColor))
+    }
+    
+    /// Sidebar list with sections
+    private var sidebarList: some View {
+        List {
+            configurationSection
+            
+            Divider()
+            
+            toolsSection
+            
+            Divider()
+            
+            settingsButton
+            
+            Spacer()
+            
+            // Status bar
+            statusBar
+        }
+        .listStyle(SidebarListStyle())
+    }
+    
+    /// Configurations section in sidebar
+    private var configurationSection: some View {
+        Section("Configurations") {
+            ForEach(viewModel.configurations) { config in
+                ConfigurationRow(config: config, isActive: viewModel.activeConfigurationID == config.id)
+                    .onTapGesture {
+                        viewModel.activateConfiguration(config.id)
+                        selectedSidebarItem = .configurations
                     }
-                case .windowTypes:
-                    WindowTypesView(viewModel: viewModel)
-                case .settings:
-                    SettingsView()
-                }
+            }
+            
+            Button(action: {
+                newConfigName = "New Configuration"
+                showingNewConfigSheet = true
+            }) {
+                Label("Add Configuration", systemImage: "plus")
             }
         }
-        .navigationTitle("Table Manager")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+    }
+    
+    /// Tools section in sidebar
+    private var toolsSection: some View {
+        Section("Tools") {
+            Button(action: {
+                selectedSidebarItem = .windowTypes
+            }) {
+                Label("Window Types", systemImage: "macwindow")
+                    .foregroundColor(selectedSidebarItem == .windowTypes ? .accentColor : .primary)
+            }
+            
+            Button(action: {
+                showingWindowPicker = true
+            }) {
+                Label("Select Window", systemImage: "eye.circle")
+            }
+            
+            Button(action: {
+                newConfigName = "Captured Layout"
+                viewModel.startCaptureMode()
+            }) {
+                Label("Capture Layout", systemImage: "camera")
+            }
+        }
+    }
+    
+    /// Settings button in sidebar
+    private var settingsButton: some View {
+        Button(action: {
+            selectedSidebarItem = .settings
+        }) {
+            Label("Settings", systemImage: "gear")
+                .foregroundColor(selectedSidebarItem == .settings ? .accentColor : .primary)
+        }
+    }
+    
+    /// Main content area
+    private var contentArea: some View {
+        ZStack {
+            // Main content based on selection
+            contentForSelectedItem
+            
+            // Settings button overlay
+            settingsButtonOverlay
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    /// Content based on sidebar selection
+    private var contentForSelectedItem: some View {
+        Group {
+            switch selectedSidebarItem {
+            case .configurations:
+                configurationContent
+            case .windowTypes:
+                WindowTypesView(viewModel: viewModel)
+            case .settings:
+                SettingsView()
+            case .none:
+                noConfigurationView
+            }
+        }
+    }
+    
+    /// Content for configuration tab
+    private var configurationContent: some View {
+        Group {
+            if let configID = viewModel.activeConfigurationID,
+               let config = viewModel.configurations.first(where: { $0.id == configID }) {
+                ConfigurationView(configuration: config, viewModel: viewModel)
+            } else {
+                noConfigurationView
+            }
+        }
+    }
+    
+    /// Settings button overlay
+    private var settingsButtonOverlay: some View {
+        VStack {
+            HStack {
+                Spacer()
                 Button(action: {
                     showingSettings.toggle()
                 }) {
                     Image(systemName: "gear")
+                        .font(.system(size: 18))
+                        .padding(10)
+                        .background(Circle().fill(Color(.controlBackgroundColor)))
                 }
+                .padding()
             }
+            Spacer()
         }
-        .sheet(isPresented: $showingNewConfigSheet) {
-            newConfigurationSheet
-        }
-        .sheet(isPresented: $showingWindowPicker) {
-            WindowPickerView(windowManager: viewModel.windowManager, 
-                             onWindowSelected: { windowType in
-                viewModel.addWindowType(windowType)
-            })
-        }
-        .alert("Capture Layout", isPresented: $viewModel.isCaptureModeActive) {
+    }
+    
+    // MARK: - Alert and Sheet Components
+    
+    /// Alert content for layout capture
+    private var captureLayoutAlertContent: some View {
+        Group {
             TextField("Configuration Name", text: $newConfigName)
             Button("Capture", action: {
                 viewModel.captureCurrentLayout(name: newConfigName)
@@ -78,70 +230,37 @@ struct MainView: View {
                 viewModel.cancelCaptureMode()
                 newConfigName = ""
             }
-        } message: {
-            Text("Enter a name for the captured layout")
         }
     }
     
-    /// Sidebar view
-    private var sidebar: some View {
-        List {
-            Section("Configurations") {
-                ForEach(viewModel.configurations) { config in
-                    ConfigurationRow(config: config, isActive: viewModel.activeConfigurationID == config.id)
-                        .onTapGesture {
-                            viewModel.activateConfiguration(config.id)
-                            selectedSidebarItem = .configurations
-                        }
+    /// Sheet for creating a new configuration
+    private var newConfigurationSheet: some View {
+        VStack(spacing: 20) {
+            Text("Create New Configuration")
+                .font(.headline)
+            
+            TextField("Configuration Name", text: $newConfigName)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .frame(width: 300)
+            
+            HStack {
+                Button("Cancel") {
+                    showingNewConfigSheet = false
                 }
                 
-                Button(action: {
-                    newConfigName = "New Configuration"
-                    showingNewConfigSheet = true
-                }) {
-                    Label("Add Configuration", systemImage: "plus")
+                Button("Create") {
+                    viewModel.createConfiguration(name: newConfigName)
+                    showingNewConfigSheet = false
                 }
+                .buttonStyle(.borderedProminent)
             }
-            
-            Divider()
-            
-            Section("Tools") {
-                NavigationLink(destination: WindowTypesView(viewModel: viewModel), 
-                               tag: MainView.SidebarItem.windowTypes,
-                               selection: $selectedSidebarItem) {
-                    Label("Window Types", systemImage: "macwindow")
-                }
-                
-                Button(action: {
-                    showingWindowPicker = true
-                }) {
-                    Label("Select Window", systemImage: "eye.circle")
-                }
-                
-                Button(action: {
-                    newConfigName = "Captured Layout"
-                    viewModel.startCaptureMode()
-                }) {
-                    Label("Capture Layout", systemImage: "camera")
-                }
-            }
-            
-            Divider()
-            
-            NavigationLink(destination: SettingsView(), 
-                           tag: MainView.SidebarItem.settings,
-                           selection: $selectedSidebarItem) {
-                Label("Settings", systemImage: "gear")
-            }
-            
-            Spacer()
-            
-            // Status bar
-            statusBar
+            .padding()
         }
-        .listStyle(SidebarListStyle())
-        .frame(minWidth: 200)
+        .padding()
+        .frame(width: 400, height: 200)
     }
+    
+    // MARK: - Helper Views
     
     /// View shown when no configuration is selected
     private var noConfigurationView: some View {
@@ -185,33 +304,6 @@ struct MainView: View {
             }
             .padding(.vertical, 5)
         }
-    }
-    
-    /// Sheet for creating a new configuration
-    private var newConfigurationSheet: some View {
-        VStack(spacing: 20) {
-            Text("Create New Configuration")
-                .font(.headline)
-            
-            TextField("Configuration Name", text: $newConfigName)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
-                .frame(width: 300)
-            
-            HStack {
-                Button("Cancel") {
-                    showingNewConfigSheet = false
-                }
-                
-                Button("Create") {
-                    viewModel.createConfiguration(name: newConfigName)
-                    showingNewConfigSheet = false
-                }
-                .buttonStyle(.borderedProminent)
-            }
-            .padding()
-        }
-        .padding()
-        .frame(width: 400, height: 200)
     }
     
     /// Color for the status indicator

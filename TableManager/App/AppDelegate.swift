@@ -9,7 +9,6 @@ import Cocoa
 import SwiftUI
 import Carbon
 
-@main
 class AppDelegate: NSObject, NSApplicationDelegate {
     
     // MARK: - Properties
@@ -21,7 +20,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     
     /// Main view model
-    private var mainViewModel: MainViewModel?
+    var mainViewModel = MainViewModel()
     
     /// Window selector view model
     private var windowSelectorViewModel: WindowSelectorViewModel?
@@ -38,19 +37,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Initialize logger
         Logger.log("Application started", level: .info)
         
-        // Create main view model
-        mainViewModel = MainViewModel()
-        
         // Create window selector view model
-        if let windowManager = mainViewModel?.windowManager {
-            windowSelectorViewModel = WindowSelectorViewModel(windowManager: windowManager)
-        }
+        windowSelectorViewModel = WindowSelectorViewModel(windowManager: mainViewModel.windowManager)
         
         // Request accessibility permissions if needed
         requestAccessibilityPermissions()
-        
-        // Create main window
-        createMainWindow()
         
         // Setup menu bar item if enabled
         if UserDefaults.standard.bool(forKey: "showInMenuBar") {
@@ -66,7 +57,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Autostart detection if enabled
         if UserDefaults.standard.bool(forKey: "autostartDetection") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                self?.mainViewModel?.windowManager.startDetection(windowTypes: self?.mainViewModel?.configManager.windowTypes ?? [])
+                self?.mainViewModel.windowManager.startDetection(windowTypes: self?.mainViewModel.configManager.windowTypes ?? [])
             }
         }
         
@@ -97,33 +88,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     // MARK: - UI Setup
-    
-    /// Creates the main application window
-    private func createMainWindow() {
-        guard let mainViewModel = mainViewModel else { return }
-        
-        let contentView = MainView()
-            .environmentObject(mainViewModel)
-        
-        // Create the window and set the content view
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
-            backing: .buffered,
-            defer: false
-        )
-        window.center()
-        window.title = "Table Manager"
-        window.setFrameAutosaveName("Main Window")
-        window.contentView = NSHostingView(rootView: contentView)
-        
-        // Create a window controller
-        mainWindowController = NSWindowController(window: window)
-        mainWindowController?.showWindow(nil)
-        
-        // Set window delegate to handle window close
-        window.delegate = self
-    }
     
     /// Requests accessibility permissions if needed
     private func requestAccessibilityPermissions() {
@@ -195,33 +159,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem.separator())
         
         // Add configurations submenu
-        if let mainViewModel = mainViewModel {
-            let configurationsMenu = NSMenu()
+        let configurationsMenu = NSMenu()
+        
+        // Add each configuration
+        for config in mainViewModel.configurations {
+            let item = NSMenuItem(title: config.name, action: #selector(activateConfiguration(_:)), keyEquivalent: "")
+            item.representedObject = config.id
             
-            // Add each configuration
-            for config in mainViewModel.configurations {
-                let item = NSMenuItem(title: config.name, action: #selector(activateConfiguration(_:)), keyEquivalent: "")
-                item.representedObject = config.id
-                
-                // Add checkmark if active
-                if mainViewModel.activeConfigurationID == config.id {
-                    item.state = .on
-                }
-                
-                configurationsMenu.addItem(item)
+            // Add checkmark if active
+            if mainViewModel.activeConfigurationID == config.id {
+                item.state = .on
             }
             
-            // Add menu item for no configurations
-            if mainViewModel.configurations.isEmpty {
-                let item = NSMenuItem(title: "No Configurations", action: nil, keyEquivalent: "")
-                item.isEnabled = false
-                configurationsMenu.addItem(item)
-            }
-            
-            let configurationsItem = NSMenuItem(title: "Configurations", action: nil, keyEquivalent: "")
-            configurationsItem.submenu = configurationsMenu
-            menu.addItem(configurationsItem)
+            configurationsMenu.addItem(item)
         }
+        
+        // Add menu item for no configurations
+        if mainViewModel.configurations.isEmpty {
+            let item = NSMenuItem(title: "No Configurations", action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            configurationsMenu.addItem(item)
+        }
+        
+        let configurationsItem = NSMenuItem(title: "Configurations", action: nil, keyEquivalent: "")
+        configurationsItem.submenu = configurationsMenu
+        menu.addItem(configurationsItem)
         
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Capture Layout...", action: #selector(captureLayout), keyEquivalent: ""))
@@ -438,13 +400,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// Shows the main window
     @objc private func showMainWindow() {
         NSApp.activate(ignoringOtherApps: true)
-        mainWindowController?.showWindow(nil)
     }
     
     /// Activates a configuration
     @objc private func activateConfiguration(_ sender: NSMenuItem) {
-        guard let configID = sender.representedObject as? String,
-              let mainViewModel = mainViewModel else {
+        guard let configID = sender.representedObject as? String else {
             return
         }
         
@@ -461,9 +421,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Show the main window and start capture mode
         showMainWindow()
         
-        // Start capture mode if main view model is available
-        guard let mainViewModel = mainViewModel else { return }
-        
         // Start the capture mode
         mainViewModel.startCaptureMode()
         Logger.log("Starting layout capture mode", level: .info)
@@ -473,9 +430,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func selectWindow() {
         // Show the main window and open window picker
         showMainWindow()
-        
-        // Show the window picker if available
-        guard let mainViewModel = mainViewModel else { return }
         
         // Open window picker by posting a notification that MainView will observe
         NotificationCenter.default.post(name: NSNotification.Name("ShowWindowPicker"), object: nil)
@@ -522,25 +476,5 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// Handles Dock visibility toggle
     @objc private func handleDockVisibilityToggle(_ notification: Notification) {
         updateDockVisibility()
-    }
-}
-
-// MARK: - NSWindowDelegate
-
-extension AppDelegate: NSWindowDelegate {
-    /// Handles window close event
-    func windowWillClose(_ notification: Notification) {
-        // Check if this is the main window
-        if let window = notification.object as? NSWindow,
-           window == mainWindowController?.window {
-            // If the menu bar item is shown, just hide the window
-            if UserDefaults.standard.bool(forKey: "showInMenuBar") {
-                // Don't terminate the app, just hide the window
-                NSApp.hide(nil)
-            } else {
-                // Otherwise terminate the app
-                NSApp.terminate(nil)
-            }
-        }
     }
 }
