@@ -54,7 +54,7 @@ class WindowSelectorViewModel: ObservableObject {
     
     /// Common title pattern tokens to recognize for poker tables
     private let commonPokerTokens = [
-        "poker", "holdem", "hold'em", "omaha", "tournament", 
+        "poker", "holdem", "hold'em", "omaha", "tournament",
         "texas", "table", "cash", "sit & go", "sit n go",
         "pokerstars", "partypoker", "888poker", "ggpoker", "winamax"
     ]
@@ -110,9 +110,6 @@ class WindowSelectorViewModel: ObservableObject {
     
     /// Stops window selection mode
     func stopSelection() {
-        isSelecting = false
-        highlightedWindow = nil
-        
         // Clean up timers and monitors
         mouseTrackingTimer?.invalidate()
         mouseTrackingTimer = nil
@@ -127,8 +124,16 @@ class WindowSelectorViewModel: ObservableObject {
             self.escapeMonitor = nil
         }
         
-        if createdWindowType == nil && selectedWindow == nil {
-            statusMessage = "Window selection canceled"
+        // Update state on the main thread asynchronously to avoid SwiftUI update cycle issues
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            self.isSelecting = false
+            self.highlightedWindow = nil
+            
+            if self.createdWindowType == nil && self.selectedWindow == nil {
+                self.statusMessage = "Window selection canceled"
+            }
         }
         
         Logger.log("Stopped window selection mode", level: .info)
@@ -142,7 +147,10 @@ class WindowSelectorViewModel: ObservableObject {
             return nil
         }
         
-        isProcessing = true
+        // Set processing flag
+        DispatchQueue.main.async { [weak self] in
+            self?.isProcessing = true
+        }
         
         // Create a window type from the selected window
         let windowType = WindowType(
@@ -153,9 +161,12 @@ class WindowSelectorViewModel: ObservableObject {
             enabled: true
         )
         
-        createdWindowType = windowType
-        statusMessage = "Window type created: \(windowType.name)"
-        isProcessing = false
+        // Update UI state asynchronously
+        DispatchQueue.main.async { [weak self] in
+            self?.createdWindowType = windowType
+            self?.statusMessage = "Window type created: \(windowType.name)"
+            self?.isProcessing = false
+        }
         
         Logger.log("Created window type: \(windowType.name) with pattern: \(windowType.titlePattern)", level: .info)
         
@@ -166,22 +177,30 @@ class WindowSelectorViewModel: ObservableObject {
     /// - Returns: True if the window type matches
     func testWindowTypeMatch() -> Bool {
         guard let windowType = createdWindowType, let window = selectedWindow else {
-            statusMessage = "No window type or window to test"
+            // Update message asynchronously to avoid view update cycle issues
+            DispatchQueue.main.async { [weak self] in
+                self?.statusMessage = "No window type or window to test"
+            }
             return false
         }
         
-        isProcessing = true
+        // Set processing flag asynchronously
+        DispatchQueue.main.async { [weak self] in
+            self?.isProcessing = true
+        }
         
         // Test if the window type matches the selected window
         let matches = windowType.matches(title: window.title, windowClass: window.windowClass)
         
-        if matches {
-            statusMessage = "✅ Window type successfully matches the selected window"
-        } else {
-            statusMessage = "❌ Window type does not match the selected window"
+        // Update status message asynchronously
+        DispatchQueue.main.async { [weak self] in
+            if matches {
+                self?.statusMessage = "✅ Window type successfully matches the selected window"
+            } else {
+                self?.statusMessage = "❌ Window type does not match the selected window"
+            }
+            self?.isProcessing = false
         }
-        
-        isProcessing = false
         
         Logger.log("Tested window type match: \(matches)", level: .info)
         
@@ -192,11 +211,16 @@ class WindowSelectorViewModel: ObservableObject {
     /// - Returns: Refined window type
     func createRefinedWindowType() -> WindowType? {
         guard let baseWindowType = createdWindowType, let selectedWindow = selectedWindow else {
-            statusMessage = "No window type or window to refine"
+            DispatchQueue.main.async { [weak self] in
+                self?.statusMessage = "No window type or window to refine"
+            }
             return nil
         }
         
-        isProcessing = true
+        // Set processing flag asynchronously
+        DispatchQueue.main.async { [weak self] in
+            self?.isProcessing = true
+        }
         
         // Get all windows from the system
         let allWindows = getAllVisibleWindowInfo()
@@ -235,9 +259,12 @@ class WindowSelectorViewModel: ObservableObject {
             refinedType.matches(title: window.title, windowClass: window.windowClass)
         }.count
         
-        createdWindowType = refinedType
-        statusMessage = "Refined window type will match \(matchCount) similar windows"
-        isProcessing = false
+        // Update UI state asynchronously
+        DispatchQueue.main.async { [weak self] in
+            self?.createdWindowType = refinedType
+            self?.statusMessage = "Refined window type will match \(matchCount) similar windows"
+            self?.isProcessing = false
+        }
         
         Logger.log("Created refined window type with pattern: \(refinedTitlePattern), matching \(matchCount) windows", level: .info)
         
@@ -395,7 +422,11 @@ class WindowSelectorViewModel: ObservableObject {
     /// Updates the current mouse position and highlights windows
     private func updateMousePosition() {
         let location = NSEvent.mouseLocation
-        mousePosition = location
+        
+        // Update mouse position on main thread
+        DispatchQueue.main.async { [weak self] in
+            self?.mousePosition = location
+        }
         
         // Update highlighted window at mouse position
         if isSelecting {
@@ -403,23 +434,29 @@ class WindowSelectorViewModel: ObservableObject {
             if let windowInfo = windowManager.pickWindowAt(screenPosition: location) {
                 // Only update if it's a different window
                 if highlightedWindow?.id != windowInfo.id {
-                    highlightedWindow = windowInfo
-                    
-                    // Keep track of recently highlighted windows (avoid flicker)
-                    previousHighlights.append(windowInfo.id)
-                    if previousHighlights.count > 5 {
-                        previousHighlights.removeFirst()
+                    // Update UI asynchronously
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self = self else { return }
+                        self.highlightedWindow = windowInfo
+                        
+                        // Keep track of recently highlighted windows (avoid flicker)
+                        self.previousHighlights.append(windowInfo.id)
+                        if self.previousHighlights.count > 5 {
+                            self.previousHighlights.removeFirst()
+                        }
+                        
+                        // Update status with window info
+                        self.statusMessage = "Hover: \(windowInfo.title)"
                     }
-                    
-                    // Update status with window info
-                    statusMessage = "Hover: \(windowInfo.title)"
                 }
             } else {
                 // Only clear if we're not hovering over a recently highlighted window
                 // This helps with flickering when the mouse is near window edges
                 if previousHighlights.isEmpty || !previousHighlights.contains(where: { $0 == highlightedWindow?.id }) {
-                    highlightedWindow = nil
-                    statusMessage = "Hover over a window and click to select it"
+                    DispatchQueue.main.async { [weak self] in
+                        self?.highlightedWindow = nil
+                        self?.statusMessage = "Hover over a window and click to select it"
+                    }
                 }
             }
         }
@@ -432,24 +469,31 @@ class WindowSelectorViewModel: ObservableObject {
         
         // Get window info at click location
         if let windowInfo = windowManager.pickWindowAt(screenPosition: location) {
-            selectedWindow = windowInfo
-            statusMessage = "Selected window: \(windowInfo.title)"
-            
-            // Create a window type suggestion
-            createdWindowType = WindowType(
-                id: UUID().uuidString,
-                name: generateWindowTypeName(from: windowInfo),
-                titlePattern: createTitlePattern(from: windowInfo.title),
-                classPattern: createClassPattern(from: windowInfo.windowClass),
-                enabled: true
-            )
-            
-            // Exit selection mode
-            isSelecting = false
+            // Update state on the main thread asynchronously
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                
+                self.selectedWindow = windowInfo
+                self.statusMessage = "Selected window: \(windowInfo.title)"
+                
+                // Create a window type suggestion
+                self.createdWindowType = WindowType(
+                    id: UUID().uuidString,
+                    name: self.generateWindowTypeName(from: windowInfo),
+                    titlePattern: self.createTitlePattern(from: windowInfo.title),
+                    classPattern: self.createClassPattern(from: windowInfo.windowClass),
+                    enabled: true
+                )
+                
+                // Exit selection mode
+                self.isSelecting = false
+            }
             
             Logger.log("Selected window: id=\(windowInfo.id), title=\(windowInfo.title), class=\(windowInfo.windowClass)", level: .info)
         } else {
-            statusMessage = "No window found at click location"
+            DispatchQueue.main.async { [weak self] in
+                self?.statusMessage = "No window found at click location"
+            }
         }
     }
     
