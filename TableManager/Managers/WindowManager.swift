@@ -236,14 +236,36 @@ class WindowManager: ObservableObject {
     /// Picks a window at the given screen position
     /// - Parameter screenPosition: Position on screen to pick a window
     /// - Returns: Window information if found, nil otherwise
+    /// Picks a window at the given screen position
+    /// - Parameter screenPosition: Position on screen to pick a window
+    /// - Returns: Window information if found, nil otherwise
     func pickWindowAt(screenPosition: CGPoint) -> WindowInfo? {
         Logger.log("Picking window at position: \(screenPosition.x), \(screenPosition.y)", level: .debug)
         
         // Get all windows from Accessibility API
-        guard let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] else {
+        guard let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
             Logger.log("Failed to get window list", level: .error)
             return nil
         }
+        
+        // System elements to exclude
+        let excludedClasses = [
+            "com.apple.dock",
+            "com.apple.WindowManager",
+            "com.apple.systemuiserver",
+            "com.apple.notificationcenterui",
+            "com.apple.controlcenter"
+        ]
+        
+        let excludedOwnerNames = [
+            "Dock",
+            "SystemUIServer",
+            "Finder",
+            "Control Center",
+            "Menu Bar",
+            "WindowManager",
+            "NotificationCenter"
+        ]
         
         // Filter windows that contain the point and sort by layer (to get top-most window)
         let matchingWindows = windows.compactMap { windowInfo -> (WindowInfo, Int)? in
@@ -255,17 +277,30 @@ class WindowManager: ObservableObject {
                   let windowID = windowInfo[kCGWindowNumber as String] as? Int,
                   let pid = windowInfo[kCGWindowOwnerPID as String] as? Int,
                   let layer = windowInfo[kCGWindowLayer as String] as? Int,
-                  let windowTitle = windowInfo[kCGWindowName as String] as? String
+                  width > 1, height > 1  // Skip very small windows (often invisible or system elements)
             else {
+                return nil
+            }
+            
+            // Get window title (may be nil for some windows)
+            let windowTitle = windowInfo[kCGWindowName as String] as? String ?? ""
+            
+            // Get window owner name
+            let ownerName = windowInfo[kCGWindowOwnerName as String] as? String ?? ""
+            
+            // Get window class using Accessibility API and process info
+            let windowClass = getWindowClassForPID(pid)
+            
+            // Skip system elements and windows
+            if excludedClasses.contains(where: { windowClass.hasPrefix($0) }) ||
+               excludedOwnerNames.contains(ownerName) {
                 return nil
             }
             
             let windowFrame = CGRect(x: x, y: y, width: width, height: height)
             
+            // Check if frame contains the point
             if windowFrame.contains(screenPosition) {
-                // Get window class using Accessibility API and process info
-                let windowClass = getWindowClassForPID(pid)
-                
                 return (WindowInfo(
                     id: windowID,
                     pid: pid,
@@ -283,6 +318,7 @@ class WindowManager: ObservableObject {
             return topWindow.0
         }
         
+        Logger.log("No suitable window found at position", level: .debug)
         return nil
     }
     
