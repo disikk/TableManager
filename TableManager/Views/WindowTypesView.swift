@@ -45,6 +45,9 @@ struct WindowTypesView: View {
     /// Window selector view model for window selection
     @StateObject private var windowSelectorViewModel: WindowSelectorViewModel
     
+    /// Whether loading operation is in progress
+    @State private var isLoading = false
+    
     init(viewModel: MainViewModel) {
         self.viewModel = viewModel
         self._windowSelectorViewModel = StateObject(wrappedValue: WindowSelectorViewModel(windowManager: viewModel.windowManager))
@@ -194,7 +197,11 @@ struct WindowTypesView: View {
     /// Container for window type details
     private var windowTypeDetailsContainer: some View {
         VStack {
-            if let selectedType = selectedType {
+            if isLoading {
+                ProgressView("Processing...")
+                    .progressViewStyle(CircularProgressViewStyle())
+                    .padding()
+            } else if let selectedType = selectedType {
                 windowTypeDetails(selectedType)
             } else {
                 noSelectionView
