@@ -56,6 +56,15 @@ struct MainView: View {
             // Content area
             contentArea
         }
+        .overlay(
+            Group {
+                if let notification = NotificationManager.shared.currentNotification {
+                    NotificationView(data: notification)
+                        .transition(.move(edge: .top))
+                        .animation(.easeInOut, value: notification.id)
+                }
+            }
+        )
     }
     
     /// Left sidebar content
@@ -356,5 +365,44 @@ struct ConfigurationRow: View {
 struct MainView_Previews: PreviewProvider {
     static var previews: some View {
         MainView()
+    }
+}
+
+/// View for displaying notifications
+struct NotificationView: View {
+    let data: NotificationData
+    
+    var body: some View {
+        VStack {
+            HStack(spacing: 15) {
+                Image(systemName: data.type.icon)
+                    .foregroundColor(data.type.color)
+                    .font(.system(size: 20))
+                
+                Text(data.message)
+                    .font(.body)
+                
+                Spacer()
+                
+                Button(action: {
+                    NotificationManager.shared.hide()
+                }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(.controlBackgroundColor))
+                    .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
+            )
+            .padding()
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }

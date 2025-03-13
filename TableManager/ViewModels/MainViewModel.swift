@@ -335,7 +335,7 @@ class MainViewModel: ObservableObject {
         lastErrorMessage = message
         showingErrorAlert = true
         
-        Logger.log("Error: \(message)", level: .error)
+        NotificationManager.shared.show(message, type: .error)
     }
     
     // MARK: - Private Methods

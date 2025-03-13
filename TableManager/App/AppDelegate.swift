@@ -44,7 +44,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         requestAccessibilityPermissions()
         
         // Setup menu bar item if enabled
-        if UserDefaults.standard.bool(forKey: "showInMenuBar") {
+        if UserDefaults.standard.bool(forKey: Constants.UserDefaults.showInMenuBar) {
             setupStatusItem()
         }
         
@@ -55,7 +55,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         registerGlobalHotkeys()
         
         // Autostart detection if enabled
-        if UserDefaults.standard.bool(forKey: "autostartDetection") {
+        if UserDefaults.standard.bool(forKey: Constants.UserDefaults.autostartDetection) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
                 self?.mainViewModel.windowManager.startDetection(windowTypes: self?.mainViewModel.configManager.windowTypes ?? [])
             }
@@ -67,7 +67,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     /// Hides/shows the app from Dock
     private func updateDockVisibility() {
-        let hideFromDock = UserDefaults.standard.bool(forKey: "hideFromDock")
+        let hideFromDock = UserDefaults.standard.bool(forKey: Constants.UserDefaults.hideFromDock)
         
         if hideFromDock {
             // Hide from Dock
@@ -115,7 +115,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleMenuBarToggle),
-            name: NSNotification.Name("ToggleMenuBarItem"),
+            name: Constants.Notifications.toggleMenuBarItem,
             object: nil
         )
         
@@ -123,7 +123,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleConfigurationsChanged),
-            name: NSNotification.Name("ConfigurationsChanged"),
+            name: Constants.Notifications.configurationsChanged,
             object: nil
         )
         
@@ -131,7 +131,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleDockVisibilityToggle),
-            name: NSNotification.Name("ToggleDockVisibility"),
+            name: Constants.Notifications.toggleDockVisibility,
             object: nil
         )
     }
@@ -212,85 +212,57 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         registerHotkey(hotkeyString: selectHotkey, id: 2, selector: #selector(selectWindow))
     }
     
-    /// Registers a single hotkey
+    /// Регистрирует глобальную горячую клавишу
     private func registerHotkey(hotkeyString: String, id: Int, selector: Selector) {
-        // Parse hotkey string to get modifiers and key code
+        // Парсим строку горячей клавиши
         var modifiers: UInt32 = 0
         var keyCode: UInt32 = 0
         
-        // Check modifiers
-        if hotkeyString.contains("⌘") {
-            modifiers |= UInt32(cmdKey)
-        }
-        if hotkeyString.contains("⌥") {
-            modifiers |= UInt32(optionKey)
-        }
-        if hotkeyString.contains("⌃") {
-            modifiers |= UInt32(controlKey)
-        }
-        if hotkeyString.contains("⇧") {
-            modifiers |= UInt32(shiftKey)
+        // Проверяем модификаторы
+        if hotkeyString.contains("⌘") { modifiers |= UInt32(cmdKey) }
+        if hotkeyString.contains("⌥") { modifiers |= UInt32(optionKey) }
+        if hotkeyString.contains("⌃") { modifiers |= UInt32(controlKey) }
+        if hotkeyString.contains("⇧") { modifiers |= UInt32(shiftKey) }
+        
+        // Получаем символ
+        let lastChar = hotkeyString.last.map(String.init) ?? ""
+        
+        // Безопасное получение кода клавиши через словарь
+        let keyMap: [String: UInt32] = [
+            "A": 0, "B": 11, "C": 8, "D": 2, "E": 14, "F": 3, "G": 5, "H": 4, "I": 34,
+            "J": 38, "K": 40, "L": 37, "M": 46, "N": 45, "O": 31, "P": 35, "Q": 12,
+            "R": 15, "S": 1, "T": 17, "U": 32, "V": 9, "W": 13, "X": 7, "Y": 16, "Z": 6,
+            "1": 18, "2": 19, "3": 20, "4": 21, "5": 23, "6": 22, "7": 26, "8": 28, "9": 25, "0": 29,
+            "F1": 122, "F2": 120, "F3": 99, "F4": 118, "F5": 96, "F6": 97, "F7": 98,
+            "F8": 100, "F9": 101, "F10": 109, "F11": 103, "F12": 111,
+            "Space": 49, "Return": 36, "←": 123, "→": 124, "↑": 126, "↓": 125
+        ]
+        
+        // Безопасное получение кода клавиши
+        if let code = keyMap[lastChar.uppercased()] {
+            keyCode = code
+        } else if let function = keyMap.keys.first(where: { hotkeyString.contains($0) }) {
+            keyCode = keyMap[function] ?? 0
         }
         
-        // Get the character
-        var key = ""
-        if let lastChar = hotkeyString.last {
-            key = String(lastChar)
+        // Если не смогли определить код клавиши, логируем ошибку и выходим
+        if keyCode == 0 && !lastChar.isEmpty {
+            Logger.log("Unable to map key for hotkey: \(hotkeyString)", level: .error)
+            return
         }
         
-        // Special cases for function keys and others
-        if hotkeyString.contains("F1") { keyCode = 122 }
-        else if hotkeyString.contains("F2") { keyCode = 120 }
-        else if hotkeyString.contains("F3") { keyCode = 99 }
-        else if hotkeyString.contains("F4") { keyCode = 118 }
-        else if hotkeyString.contains("F5") { keyCode = 96 }
-        else if hotkeyString.contains("F6") { keyCode = 97 }
-        else if hotkeyString.contains("F7") { keyCode = 98 }
-        else if hotkeyString.contains("F8") { keyCode = 100 }
-        else if hotkeyString.contains("F9") { keyCode = 101 }
-        else if hotkeyString.contains("F10") { keyCode = 109 }
-        else if hotkeyString.contains("F11") { keyCode = 103 }
-        else if hotkeyString.contains("F12") { keyCode = 111 }
-        else if hotkeyString.contains("Space") { keyCode = 49 }
-        else if hotkeyString.contains("Return") { keyCode = 36 }
-        else if hotkeyString.contains("←") { keyCode = 123 }
-        else if hotkeyString.contains("→") { keyCode = 124 }
-        else if hotkeyString.contains("↑") { keyCode = 126 }
-        else if hotkeyString.contains("↓") { keyCode = 125 }
-        else {
-            // For alphanumeric keys
-            let uppercaseKey = key.uppercased()
-            let keyChar = uppercaseKey.first?.unicodeScalars.first?.value ?? 0
-            
-            // Get keycode for the character
-            let keyMap: [Character: UInt32] = [
-                "A": 0, "B": 11, "C": 8, "D": 2, "E": 14, "F": 3, "G": 5, "H": 4, "I": 34,
-                "J": 38, "K": 40, "L": 37, "M": 46, "N": 45, "O": 31, "P": 35, "Q": 12,
-                "R": 15, "S": 1, "T": 17, "U": 32, "V": 9, "W": 13, "X": 7, "Y": 16, "Z": 6,
-                "1": 18, "2": 19, "3": 20, "4": 21, "5": 23, "6": 22, "7": 26, "8": 28, "9": 25, "0": 29
-            ]
-            
-            if let code = keyMap[Character(uppercaseKey)] {
-                keyCode = code
-            }
-        }
-        
-        // Create hotkey ID
+        // Создаем ID для горячей клавиши
         var hotKeyID = EventHotKeyID()
         
-        // Use string conversion instead of fourCharCode function
-        hotKeyID.signature = OSType("TblM".utf8CString.withUnsafeBufferPointer {
-            $0.dropLast().withUnsafeBytes {
-                $0.load(as: UInt32.self)
-            }
-        })
-        
+        // Безопасное создание сигнатуры
+        let signature = "TblM"
+        hotKeyID.signature = OSType(signature.utf8.reduce(0) { ($0 << 8) + UInt32($1) })
         hotKeyID.id = UInt32(id)
         
-        // Store hotkey ID
+        // Сохраняем ID горячей клавиши
         hotkeyIDs.append(hotKeyID)
         
-        // Register hotkey
+        // Регистрируем горячую клавишу
         var hotKeyRef: EventHotKeyRef?
         let status = RegisterEventHotKey(
             keyCode,
@@ -301,12 +273,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             &hotKeyRef
         )
         
-        // Store reference if successful
+        // Сохраняем ссылку, если успешно
         if status == noErr, let ref = hotKeyRef {
             hotKeyRefs.append(ref)
             Logger.log("Registered hotkey: \(hotkeyString)", level: .info)
             
-            // Install event handler if this is the first hotkey
+            // Устанавливаем обработчик событий, если это первая горячая клавиша
             if hotKeyRefs.count == 1 {
                 installEventHandler()
             }

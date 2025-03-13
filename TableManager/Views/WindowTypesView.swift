@@ -693,23 +693,34 @@ struct WindowTypesView: View {
     
     /// Saves a window type
     private func saveWindowType(_ windowType: WindowType) {
-        if viewModel.configManager.windowTypes.contains(where: { $0.id == windowType.id }) {
-            // Update existing
-            viewModel.configManager.updateWindowType(windowType)
-            showToast = true
-            toastMessage = "Window type '\(windowType.name)' updated"
-        } else {
-            // Add new
-            viewModel.configManager.addWindowType(windowType)
-            showToast = true
-            toastMessage = "Window type '\(windowType.name)' added"
-        }
+        isLoading = true
         
-        // Refresh window types
-        loadWindowTypes()
-        selectedType = windowType
-        editingType = nil
-        showingEditSheet = false
+        DispatchQueue.global().async { [weak self] in
+            // Сохраняем тип окна
+            if self?.viewModel.configManager.windowTypes.contains(where: { $0.id == windowType.id }) ?? false {
+                // Обновляем существующий
+                self?.viewModel.configManager.updateWindowType(windowType)
+            } else {
+                // Добавляем новый
+                self?.viewModel.configManager.addWindowType(windowType)
+            }
+            
+            // Обновляем UI в главном потоке
+            DispatchQueue.main.async {
+                self?.isLoading = false
+                self?.loadWindowTypes()
+                self?.selectedType = windowType
+                self?.editingType = nil
+                self?.showingEditSheet = false
+                
+                // Показываем уведомление об успехе
+                let message = self?.viewModel.configManager.windowTypes.contains(where: { $0.id == windowType.id }) ?? false
+                    ? "Window type '\(windowType.name)' updated"
+                    : "Window type '\(windowType.name)' added"
+                
+                NotificationManager.shared.show(message, type: .success)
+            }
+        }
     }
 }
 

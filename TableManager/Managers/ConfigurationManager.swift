@@ -59,6 +59,9 @@ class ConfigurationManager: ObservableObject {
         
         // Start auto-activation if enabled
         startAutoActivation()
+        
+        // Setup auto-save
+        setupAutoSave()
     }
     
     // MARK: - Public Methods
@@ -143,6 +146,45 @@ class ConfigurationManager: ObservableObject {
         saveWindowTypes()
     }
     
+    /// Восстанавливает данные из резервной копии
+    func restoreFromBackup() -> Bool {
+        let fileManager = FileManager.default
+        let configBackupPath = configPath.deletingPathExtension().appendingPathExtension("json.bak")
+        let windowTypesBackupPath = windowTypesPath.deletingPathExtension().appendingPathExtension("json.bak")
+        
+        var success = false
+        
+        do {
+            if fileManager.fileExists(atPath: configBackupPath.path) {
+                if fileManager.fileExists(atPath: configPath.path) {
+                    try fileManager.removeItem(at: configPath)
+                }
+                try fileManager.copyItem(at: configBackupPath, to: configPath)
+                success = true
+            }
+            
+            if fileManager.fileExists(atPath: windowTypesBackupPath.path) {
+                if fileManager.fileExists(atPath: windowTypesPath.path) {
+                    try fileManager.removeItem(at: windowTypesPath)
+                }
+                try fileManager.copyItem(at: windowTypesBackupPath, to: windowTypesPath)
+                success = true
+            }
+            
+            if success {
+                // Загружаем восстановленные данные
+                loadWindowTypes()
+                loadConfigurations()
+                Logger.log("Successfully restored from backup", level: .info)
+            }
+        } catch {
+            Logger.log("Failed to restore from backup: \(error)", level: .error)
+            success = false
+        }
+        
+        return success
+    }
+    
     /// Creates a new configuration from the current window positions
     /// - Parameters:
     ///   - name: Name for the new configuration
@@ -167,27 +209,89 @@ class ConfigurationManager: ObservableObject {
     
     // MARK: - Private Methods
     
-    /// Loads saved configurations
-    private func loadConfigurations() {
+    /// Таймер автосохранения
+    private var autoSaveTimer: Timer?
+
+    /// Настраивает автосохранение
+    private func setupAutoSave() {
+        autoSaveTimer?.invalidate()
+        
+        // Автосохранение каждые 5 минут
+        autoSaveTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+            self?.saveConfigurations()
+            self?.saveWindowTypes()
+        }
+    }
+
+    /// Создает резервную копию перед сохранением
+    private func backupBeforeSave() {
+        let fileManager = FileManager.default
+        let configBackupPath = configPath.deletingPathExtension().appendingPathExtension("json.bak")
+        let windowTypesBackupPath = windowTypesPath.deletingPathExtension().appendingPathExtension("json.bak")
+        
         do {
-            if FileManager.default.fileExists(atPath: configPath.path) {
-                let data = try Data(contentsOf: configPath)
-                configurations = try JSONDecoder().decode([Configuration].self, from: data)
-                Logger.log("Loaded \(configurations.count) configurations", level: .info)
+            if fileManager.fileExists(atPath: configPath.path) {
+                if fileManager.fileExists(atPath: configBackupPath.path) {
+                    try fileManager.removeItem(at: configBackupPath)
+                }
+                try fileManager.copyItem(at: configPath, to: configBackupPath)
+            }
+            
+            if fileManager.fileExists(atPath: windowTypesPath.path) {
+                if fileManager.fileExists(atPath: windowTypesBackupPath.path) {
+                    try fileManager.removeItem(at: windowTypesBackupPath)
+                }
+                try fileManager.copyItem(at: windowTypesPath, to: windowTypesBackupPath)
             }
         } catch {
-            Logger.log("Failed to load configurations: \(error)", level: .error)
+            Logger.log("Failed to create backup: \(error)", level: .error)
+        }
+    }
+
+    /// Загружает сохраненные конфигурации
+    private func loadConfigurations() {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            
+            do {
+                if FileManager.default.fileExists(atPath: self.configPath.path) {
+                    let data = try Data(contentsOf: self.configPath)
+                    let loadedConfigs = try JSONDecoder().decode([Configuration].self, from: data)
+                    
+                    // Обновляем данные на главной очереди
+                    DispatchQueue.main.async {
+                        self.configurations = loadedConfigs
+                        Logger.log("Loaded \(loadedConfigs.count) configurations", level: .info)
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    Logger.log("Failed to load configurations: \(error)", level: .error)
+                }
+            }
         }
     }
     
-    /// Saves configurations
+    /// Сохраняет конфигурации
     private func saveConfigurations() {
-        do {
-            let data = try JSONEncoder().encode(configurations)
-            try data.write(to: configPath)
-            Logger.log("Saved \(configurations.count) configurations", level: .info)
-        } catch {
-            Logger.log("Failed to save configurations: \(error)", level: .error)
+        // Сохраняем копию данных для обработки в фоновом потоке
+        let configurationsToSave = self.configurations
+        
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            
+            do {
+                let data = try JSONEncoder().encode(configurationsToSave)
+                try data.write(to: self.configPath)
+                
+                DispatchQueue.main.async {
+                    Logger.log("Saved \(configurationsToSave.count) configurations", level: .info)
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    Logger.log("Failed to save configurations: \(error)", level: .error)
+                }
+            }
         }
     }
     

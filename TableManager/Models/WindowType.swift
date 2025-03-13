@@ -24,6 +24,9 @@ struct WindowType: Identifiable, Codable, Equatable, Hashable {
     /// Whether this window type is enabled
     var enabled: Bool
     
+    // Кэш регулярных выражений для улучшения производительности
+    private static var regexCache = [String: NSRegularExpression]()
+    
     /// Check if a window matches this type
     /// - Parameters:
     ///   - title: Window title to check
@@ -47,18 +50,28 @@ struct WindowType: Identifiable, Codable, Equatable, Hashable {
             return true
         }
         
-        // Convert pattern to regex
+        // Создаем ключ для кэша
         let escapedPattern = NSRegularExpression.escapedPattern(for: pattern)
-        let regexPattern = escapedPattern.replacingOccurrences(of: "\\*", with: ".*")
+        let regexPattern = "^\(escapedPattern.replacingOccurrences(of: "\\*", with: ".*"))$"
         
-        do {
-            let regex = try NSRegularExpression(pattern: "^\(regexPattern)$", options: [.caseInsensitive])
-            let range = NSRange(location: 0, length: string.utf16.count)
-            return regex.firstMatch(in: string, options: [], range: range) != nil
-        } catch {
-            Logger.log("Invalid regex pattern: \(error)", level: .error)
-            return false
+        let regex: NSRegularExpression
+        if let cachedRegex = Self.regexCache[regexPattern] {
+            // Используем кэшированное выражение
+            regex = cachedRegex
+        } else {
+            do {
+                // Создаем новое регулярное выражение
+                regex = try NSRegularExpression(pattern: regexPattern, options: [.caseInsensitive])
+                // Добавляем в кэш
+                Self.regexCache[regexPattern] = regex
+            } catch {
+                Logger.log("Invalid regex pattern: \(error)", level: .error)
+                return false
+            }
         }
+        
+        let range = NSRange(location: 0, length: string.utf16.count)
+        return regex.firstMatch(in: string, options: [], range: range) != nil
     }
     
     /// Create a copy of this window type with a new ID
