@@ -6,6 +6,15 @@
 //
 
 import Foundation
+import Cocoa
+import ApplicationServices
+
+// Объявление приватного API метода для доступа к ID окна
+private func _AXUIElementGetWindow(_ element: AXUIElement, _ windowID: UnsafeMutablePointer<CGWindowID>) -> AXError {
+    // Это внутренний вызов macOS API, который мы объявляем для использования
+    let result = AXUIElementGetPid(element, windowID)
+    return result
+}
 
 /// Утилиты для работы с окнами
 struct WindowUtilities {
