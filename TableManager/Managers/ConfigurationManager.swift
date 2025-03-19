@@ -419,6 +419,19 @@ class ConfigurationManager: ObservableObject {
             self?.windowManager.applyLayout(config.layout)
         }
     }
+    
+    // MARK: - Deinitialization
+    
+    deinit {
+        // Остановка таймеров
+        autoSaveTimer?.invalidate()
+        autoSaveTimer = nil
+        
+        // Удаление наблюдателей уведомлений
+        NotificationCenter.default.removeObserver(self)
+        
+        Logger.log("ConfigurationManager properly deallocated", level: .debug)
+    }
 }
 
 // MARK: - Supporting Types

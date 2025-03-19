@@ -155,7 +155,7 @@ class WindowSelectorViewModel: ObservableObject {
         // Create a window type from the selected window
         let windowType = WindowType(
             id: UUID().uuidString,
-            name: generateWindowTypeName(from: selectedWindow),
+            name: generateWindowTypeName(from: selectedWindow.title, windowClass: selectedWindow.windowClass),
             titlePattern: createTitlePattern(from: selectedWindow.title),
             classPattern: createClassPattern(from: selectedWindow.windowClass),
             enabled: true
@@ -274,78 +274,8 @@ class WindowSelectorViewModel: ObservableObject {
     // MARK: - Helper Methods
     
     /// Generates a name for a window type based on window info
-    func generateWindowTypeName(from windowInfo: WindowInfo) -> String {
-        // First, check if it's a known poker client
-        let isKnownClient = knownPokerClients.contains { clientID in
-            windowInfo.windowClass.lowercased().contains(clientID.lowercased())
-        }
-        
-        // Extract app name from window class
-        var appName = "Unknown"
-        
-        // Try to extract from bundle ID (e.g., com.pokerstars.client -> PokerStars)
-        let components = windowInfo.windowClass.components(separatedBy: ".")
-        if components.count > 1 {
-            let lastComponent = components.last ?? ""
-            
-            if lastComponent.lowercased() == "app" || lastComponent.lowercased() == "client" {
-                // Use second to last component if last is just "app" or "client"
-                if components.count > 2 {
-                    appName = components[components.count - 2].capitalized
-                }
-            } else {
-                appName = lastComponent.capitalized
-            }
-        }
-        
-        // For known clients, use better capitalization
-        if isKnownClient {
-            if windowInfo.windowClass.lowercased().contains("pokerstars") {
-                appName = "PokerStars"
-            } else if windowInfo.windowClass.lowercased().contains("partypoker") {
-                appName = "PartyPoker"
-            } else if windowInfo.windowClass.lowercased().contains("888poker") {
-                appName = "888poker"
-            } else if windowInfo.windowClass.lowercased().contains("ggpoker") {
-                appName = "GGPoker"
-            } else if windowInfo.windowClass.lowercased().contains("winamax") {
-                appName = "Winamax"
-            }
-        }
-        
-        // Extract table information from title
-        var tableInfo = ""
-        
-        // Check for common patterns in poker table titles
-        let lowercaseTitle = windowInfo.title.lowercased()
-        
-        // Extract table number or ID
-        if let tableNumberRange = lowercaseTitle.range(of: "table [0-9]+", options: .regularExpression) {
-            tableInfo = String(windowInfo.title[tableNumberRange])
-        } else if let tableIDRange = lowercaseTitle.range(of: "#[0-9]+", options: .regularExpression) {
-            tableInfo = String(windowInfo.title[tableIDRange])
-        } else if let numberRange = lowercaseTitle.range(of: "[0-9]{4,}", options: .regularExpression) {
-            // If there's a number with at least 4 digits, it might be a table ID
-            tableInfo = "Table " + String(windowInfo.title[numberRange])
-        }
-        
-        // Construct name
-        var name = appName
-        
-        if !tableInfo.isEmpty {
-            name += " - " + tableInfo
-        } else if isKnownClient {
-            name += " Table"
-        } else {
-            // If not a poker client or no table info found, use a portion of the title
-            var shortTitle = windowInfo.title
-            if shortTitle.count > 20 {
-                shortTitle = String(shortTitle.prefix(17)) + "..."
-            }
-            name += " - " + shortTitle
-        }
-        
-        return name
+    func generateWindowTypeName(from windowTitle: String, windowClass: String) -> String {
+        return WindowUtilities.generateWindowTypeName(from: windowTitle, windowClass: windowClass)
     }
     
     /// Creates a title pattern with wildcards from a window title
@@ -479,7 +409,7 @@ class WindowSelectorViewModel: ObservableObject {
                 // Create a window type suggestion
                 self.createdWindowType = WindowType(
                     id: UUID().uuidString,
-                    name: self.generateWindowTypeName(from: windowInfo),
+                    name: self.generateWindowTypeName(from: windowInfo.title, windowClass: windowInfo.windowClass),
                     titlePattern: self.createTitlePattern(from: windowInfo.title),
                     classPattern: self.createClassPattern(from: windowInfo.windowClass),
                     enabled: true

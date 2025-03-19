@@ -263,7 +263,7 @@ class MainViewModel: ObservableObject {
         let selectorViewModel = WindowSelectorViewModel(windowManager: windowManager)
         
         // Generate the name using helper functions
-        let name = generateWindowTypeName(from: info)
+        let name = generateWindowTypeName(from: info.title, windowClass: info.windowClass)
         let titlePattern = createTitlePattern(from: info.title)
         let classPattern = createClassPattern(from: info.windowClass)
         
@@ -442,43 +442,8 @@ class MainViewModel: ObservableObject {
     // MARK: - Window Type Helper Methods
     
     /// Generates a name for a window type based on window info
-    private func generateWindowTypeName(from windowInfo: WindowInfo) -> String {
-        // Extract app name from window class
-        var appName = "Unknown"
-        
-        // Try to extract from bundle ID (e.g., com.pokerstars.client -> PokerStars)
-        let components = windowInfo.windowClass.components(separatedBy: ".")
-        if components.count > 1 {
-            let lastComponent = components.last ?? ""
-            
-            if lastComponent.lowercased() == "app" || lastComponent.lowercased() == "client" {
-                // Use second to last component if last is just "app" or "client"
-                if components.count > 2 {
-                    appName = components[components.count - 2].capitalized
-                }
-            } else {
-                appName = lastComponent.capitalized
-            }
-        }
-        
-        // For known clients, use better capitalization
-        if windowInfo.windowClass.lowercased().contains("poker") {
-            if windowInfo.windowClass.lowercased().contains("pokerstars") {
-                appName = "PokerStars"
-            } else if windowInfo.windowClass.lowercased().contains("partypoker") {
-                appName = "PartyPoker"
-            } else if windowInfo.windowClass.lowercased().contains("888poker") {
-                appName = "888poker"
-            }
-        }
-        
-        // Shorten the window title if it's too long
-        var shortTitle = windowInfo.title
-        if shortTitle.count > 20 {
-            shortTitle = String(shortTitle.prefix(17)) + "..."
-        }
-        
-        return "\(appName) - \(shortTitle)"
+    private func generateWindowTypeName(from windowTitle: String, windowClass: String) -> String {
+        return WindowUtilities.generateWindowTypeName(from: windowTitle, windowClass: windowClass)
     }
     
     /// Creates a title pattern with wildcards from a window title

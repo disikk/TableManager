@@ -76,10 +76,20 @@ class WindowManager: ObservableObject {
     }
     
     deinit {
-        // Remove notification observers
+        // Остановка таймеров
+        detectionTimer?.invalidate()
+        detectionTimer = nil
+        
+        hoverTimer?.invalidate()
+        hoverTimer = nil
+        
+        // Удаление наблюдателей уведомлений
         NotificationCenter.default.removeObserver(self)
-        stopDetection()
-        stopHoverDetection()
+        
+        // Освобождение ресурсов работы с окнами
+        managedWindows.removeAll()
+        
+        Logger.log("WindowManager properly deallocated", level: .debug)
     }
     
     // MARK: - Window Detection Methods
@@ -581,47 +591,47 @@ class WindowManager: ObservableObject {
     
     /// Checks for windows under the mouse cursor and activates if needed
     private func checkMouseHover() {
-        // Get current mouse position
+        // Получаем текущую позицию мыши
         let mousePosition = NSEvent.mouseLocation
         
-        // Check for window under cursor
+        // Проверяем наличие окна под курсором
         if let windowInfo = pickWindowAt(screenPosition: mousePosition) {
-            // Check if it's one of our managed windows
+            // Проверяем, является ли это одним из наших управляемых окон
             let isManaged = managedWindows.contains { $0.id == windowInfo.id }
             
             if isManaged {
-                // If we're still over the same window
+                // Если мы всё ещё над тем же окном
                 if lastHoveredWindowID == windowInfo.id {
-                    // Check the hover duration against delay setting
+                    // Проверяем время наведения против настройки задержки
                     if let startTime = hoverStartTime {
-                        let hoverDelay = defaults.double(forKey: "hoverDelay")
+                        let hoverDelay = defaults.double(forKey: Constants.UserDefaults.hoverDelay)
                         let currentDuration = Date().timeIntervalSince(startTime)
                         
                         if currentDuration >= hoverDelay {
-                            // Check if we're past the activation cooldown
+                            // Проверяем прошли ли мы время ожидания между активациями
                             if lastActivationTime == nil || Date().timeIntervalSince(lastActivationTime!) >= activationCooldown {
-                                // Time to activate the window
+                                // Время активировать окно
                                 activateWindow(windowInfo.id, pid: windowInfo.pid)
                                 lastActivationTime = Date()
                                 
-                                // Reset hover tracking to prevent repeated activations
+                                // Сбрасываем отслеживание наведения для предотвращения повторных активаций
                                 lastHoveredWindowID = nil
                                 hoverStartTime = nil
                             }
                         }
                     }
                 } else {
-                    // Started hovering over a new window
+                    // Начали наведение на новое окно
                     lastHoveredWindowID = windowInfo.id
                     hoverStartTime = Date()
                 }
             } else {
-                // Not a managed window, clear hover state
+                // Не управляемое окно, очищаем состояние наведения
                 lastHoveredWindowID = nil
                 hoverStartTime = nil
             }
         } else {
-            // No window under cursor, clear hover state
+            // Под курсором нет окна, очищаем состояние наведения
             lastHoveredWindowID = nil
             hoverStartTime = nil
         }
@@ -631,58 +641,26 @@ class WindowManager: ObservableObject {
     /// - Parameters:
     ///   - windowID: ID of window to activate
     ///   - pid: Process ID of window's application
-    private func activateWindow(_ windowID: Int, pid: Int) {
-        // Create AXUIElement for the window
-        let app = AXUIElementCreateApplication(pid_t(pid))
-        var windowRef: AXUIElement?
+    /// - Returns: Success of the operation
+    private func activateWindow(_ windowID: CGWindowID, pid: pid_t) -> Bool {
+        Logger.log("Activating window ID: \(windowID), PID: \(pid)", level: .debug)
         
-        // Find the specific window by its ID
-        var value: CFTypeRef?
-        var axError = AXUIElementCopyAttributeValue(app, "AXWindows" as CFString, &value)
+        // Use the safe method to activate the window with error handling
+        let success = WindowUtilities.safeActivateWindow(windowID: windowID, pid: pid)
         
-        if axError != .success {
-            Logger.log("Error getting windows for activation PID \(pid): \(axError.rawValue)", level: .error)
-            return
-        }
-        
-        guard let windows = value as? [AXUIElement] else {
-            Logger.log("Could not convert windows value to array for activation", level: .error)
-            return
-        }
-        
-        for axWindow in windows {
-            var windowIDValue: CFTypeRef?
-            axError = AXUIElementCopyAttributeValue(axWindow, "AXWindowID" as CFString, &windowIDValue)
+        if success {
+            Logger.log("Successfully activated window ID: \(windowID)", level: .info)
             
-            if axError != .success {
-                Logger.log("Error getting window ID for activation: \(axError.rawValue)", level: .error)
-                continue
-            }
-            
-            if let axWindowID = windowIDValue as? Int, axWindowID == windowID {
-                windowRef = axWindow
-                break
-            }
-        }
-        
-        // Activate the window
-        if let windowRef = windowRef {
-            // First, raise the window to front
-            var axError = AXUIElementSetAttributeValue(windowRef, "AXMain" as CFString, kCFBooleanTrue)
-            if axError != .success {
-                Logger.log("Error setting window as main: \(axError.rawValue)", level: .error)
-            }
-            
-            // Then, make it frontmost
-            axError = AXUIElementSetAttributeValue(app, "AXFrontmost" as CFString, kCFBooleanTrue)
-            if axError != .success {
-                Logger.log("Error setting application as frontmost: \(axError.rawValue)", level: .error)
-            } else {
-                Logger.log("Window activated: \(windowID)", level: .debug)
-            }
+            // Send notification about successful activation
+            NotificationCenter.default.post(name: .windowActivated, object: nil, userInfo: ["windowID": windowID])
         } else {
-            Logger.log("Failed to find window reference for activation", level: .error)
+            Logger.log("Failed to activate window ID: \(windowID)", level: .error)
+            
+            // Notify user about the problem
+            NotificationManager.shared.show("Failed to activate window. Check accessibility permissions.", type: .error)
         }
+        
+        return success
     }
     
     /// Gets the window class for a process

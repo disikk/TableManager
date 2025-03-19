@@ -18,6 +18,7 @@ struct Constants {
         static let toggleMenuBarItem = Notification.Name("ToggleMenuBarItem")
         static let configurationsChanged = Notification.Name("ConfigurationsChanged")
         static let toggleDockVisibility = Notification.Name("ToggleDockVisibility")
+        static let windowActivated = Notification.Name("WindowActivated")
     }
     
     /// Ключи для UserDefaults
@@ -35,4 +36,9 @@ struct Constants {
         static let captureHotkey = "captureHotkey"
         static let selectHotkey = "selectHotkey"
     }
+}
+
+// Расширение для удобного доступа к уведомлениям
+extension Notification.Name {
+    static let windowActivated = Constants.Notifications.windowActivated
 }

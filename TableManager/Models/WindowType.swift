@@ -24,8 +24,20 @@ struct WindowType: Identifiable, Codable, Equatable, Hashable {
     /// Whether this window type is enabled
     var enabled: Bool
     
-    // Кэш регулярных выражений для улучшения производительности
-    private static var regexCache = [String: NSRegularExpression]()
+    // Кэш регулярных выражений с ограничением размера
+    private static var regexCache: [String: NSRegularExpression] = [:]
+    private static let maxRegexCacheSize = 50
+    
+    /// Добавьте этот метод в класс WindowType
+    private static func addToRegexCache(pattern: String, regex: NSRegularExpression) {
+        // Если кэш достиг максимального размера, удаляем первый элемент
+        if regexCache.count >= maxRegexCacheSize {
+            if let firstKey = regexCache.keys.first {
+                regexCache.removeValue(forKey: firstKey)
+            }
+        }
+        regexCache[pattern] = regex
+    }
     
     /// Check if a window matches this type
     /// - Parameters:
@@ -62,8 +74,8 @@ struct WindowType: Identifiable, Codable, Equatable, Hashable {
             do {
                 // Создаем новое регулярное выражение
                 regex = try NSRegularExpression(pattern: regexPattern, options: [.caseInsensitive])
-                // Добавляем в кэш
-                Self.regexCache[regexPattern] = regex
+                // Добавляем в кэш с ограничением размера
+                Self.addToRegexCache(pattern: regexPattern, regex: regex)
             } catch {
                 Logger.log("Invalid regex pattern: \(error)", level: .error)
                 return false
