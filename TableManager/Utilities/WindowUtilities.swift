@@ -52,10 +52,7 @@ struct WindowUtilities {
     /// - Returns: Успешность операции
     static func safeActivateWindow(windowID: CGWindowID, pid: pid_t) -> Bool {
         // Создаем элемент доступности для окна
-        guard let app = AXUIElementCreateApplication(pid) else {
-            Logger.log("Failed to create accessibility element for PID: \(pid)", level: .error)
-            return false
-        }
+        let app = AXUIElementCreateApplication(pid)
         
         // Получаем список окон приложения
         var value: CFTypeRef?
@@ -81,7 +78,6 @@ struct WindowUtilities {
                 }
                 
                 // Активируем приложение
-                let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.WindowManager")
                 if let app = NSRunningApplication(processIdentifier: pid) {
                     if !app.isActive {
                         let activateResult = app.activate(options: .activateIgnoringOtherApps)

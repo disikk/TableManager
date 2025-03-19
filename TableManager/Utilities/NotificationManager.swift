@@ -83,8 +83,10 @@ class NotificationManager: ObservableObject {
                 self.notificationHistory.removeLast()
             }
             
-            // Отображаем уведомление
-            self.currentNotification = notification
+            // Отображаем уведомление с анимацией
+            withAnimation(.spring()) {
+                self.currentNotification = notification
+            }
             
             // Логируем в зависимости от типа
             switch type {
@@ -100,7 +102,9 @@ class NotificationManager: ObservableObject {
             self.hideTimer?.invalidate()
             if duration > 0 {
                 self.hideTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
-                    self?.currentNotification = nil
+                    withAnimation(.easeOut) {
+                        self?.currentNotification = nil
+                    }
                 }
             }
         }
@@ -110,7 +114,9 @@ class NotificationManager: ObservableObject {
     func hide() {
         DispatchQueue.main.async { [weak self] in
             self?.hideTimer?.invalidate()
-            self?.currentNotification = nil
+            withAnimation(.easeOut) {
+                self?.currentNotification = nil
+            }
         }
     }
 }

@@ -642,21 +642,25 @@ class WindowManager: ObservableObject {
     ///   - windowID: ID of window to activate
     ///   - pid: Process ID of window's application
     /// - Returns: Success of the operation
-    private func activateWindow(_ windowID: CGWindowID, pid: pid_t) -> Bool {
+    private func activateWindow(_ windowID: Int, pid: Int) -> Bool {
         Logger.log("Activating window ID: \(windowID), PID: \(pid)", level: .debug)
         
-        // Use the safe method to activate the window with error handling
-        let success = WindowUtilities.safeActivateWindow(windowID: windowID, pid: pid)
+        // Приводим типы к ожидаемым CGWindowID (UInt32) и pid_t (Int32)
+        let cgWindowID = CGWindowID(windowID)
+        let processPID = pid_t(pid)
+        
+        // Используем безопасный метод активации окна с обработкой ошибок
+        let success = WindowUtilities.safeActivateWindow(windowID: cgWindowID, pid: processPID)
         
         if success {
             Logger.log("Successfully activated window ID: \(windowID)", level: .info)
             
-            // Send notification about successful activation
+            // Отправляем уведомление об успешной активации
             NotificationCenter.default.post(name: .windowActivated, object: nil, userInfo: ["windowID": windowID])
         } else {
             Logger.log("Failed to activate window ID: \(windowID)", level: .error)
             
-            // Notify user about the problem
+            // Уведомляем пользователя о проблеме
             NotificationManager.shared.show("Failed to activate window. Check accessibility permissions.", type: .error)
         }
         

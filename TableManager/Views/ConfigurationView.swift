@@ -847,111 +847,72 @@ struct SlotView: View {
 
 /// View for editing slot properties
 struct SlotEditorView: View {
-    /// The slot being edited
     @Binding var slot: Slot
+    var onSave: (Slot) -> Void
+    var onCancel: () -> Void
     
-    /// Callback when saving
-    let onSave: (Slot) -> Void
-    
-    /// Callback when canceling
-    let onCancel: () -> Void
-    
-    /// Temporary slot ID
     @State private var slotID: String
-    
-    /// Temporary slot priority
-    @State private var priority: Int
-    
-    /// Position X
     @State private var positionX: CGFloat
-    
-    /// Position Y
     @State private var positionY: CGFloat
-    
-    /// Width
     @State private var width: CGFloat
-    
-    /// Height
     @State private var height: CGFloat
+    @State private var priority: Int
     
     init(slot: Binding<Slot>, onSave: @escaping (Slot) -> Void, onCancel: @escaping () -> Void) {
         self._slot = slot
         self.onSave = onSave
         self.onCancel = onCancel
         
-        // Initialize state properties
+        // Initialize state from slot
         self._slotID = State(initialValue: slot.wrappedValue.id)
-        self._priority = State(initialValue: slot.wrappedValue.priority)
         self._positionX = State(initialValue: slot.wrappedValue.frame.minX)
         self._positionY = State(initialValue: slot.wrappedValue.frame.minY)
         self._width = State(initialValue: slot.wrappedValue.frame.width)
         self._height = State(initialValue: slot.wrappedValue.frame.height)
+        self._priority = State(initialValue: slot.wrappedValue.priority)
     }
     
     var body: some View {
-        VStack(spacing: 20) {
-            Text("Edit Slot Properties")
-                .font(.headline)
-            
-            Form {
-                Section(header: Text("Slot Information")) {
-                    HStack {
-                        Text("ID:")
-                            .frame(width: 80, alignment: .trailing)
-                        TextField("Slot ID", text: $slotID)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                    }
-                    
-                    HStack {
-                        Text("Priority:")
-                            .frame(width: 80, alignment: .trailing)
-                        Picker("Priority", selection: $priority) {
-                            ForEach(0..<10) { value in
-                                Text("\(value)").tag(value)
-                            }
-                        }
-                        .pickerStyle(MenuPickerStyle())
-                    }
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Edit Slot")
+                    .font(.headline)
+                Spacer()
+                Button(action: onCancel) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.gray)
                 }
-                
-                Section(header: Text("Position and Size")) {
-                    HStack {
-                        Text("X:")
-                            .frame(width: 80, alignment: .trailing)
-                        TextField("X", value: $positionX, formatter: NumberFormatter())
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                    }
-                    
-                    HStack {
-                        Text("Y:")
-                            .frame(width: 80, alignment: .trailing)
-                        TextField("Y", value: $positionY, formatter: NumberFormatter())
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                    }
-                    
-                    HStack {
-                        Text("Width:")
-                            .frame(width: 80, alignment: .trailing)
-                        TextField("Width", value: $width, formatter: NumberFormatter())
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                    }
-                    
-                    HStack {
-                        Text("Height:")
-                            .frame(width: 80, alignment: .trailing)
-                        TextField("Height", value: $height, formatter: NumberFormatter())
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                    }
-                }
+                .buttonStyle(.plain)
             }
             .padding()
+            .background(Color(.controlBackgroundColor))
             
             Divider()
             
+            // Content
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Preview
+                    slotPreview
+                    
+                    // ID and Priority
+                    identificationSection
+                    
+                    // Position and Size
+                    positionAndSizeSection
+                }
+                .padding()
+            }
+            
+            Divider()
+            
+            // Buttons
             HStack {
                 Button("Cancel") {
                     onCancel()
                 }
+                .keyboardShortcut(.escape, modifiers: [])
                 
                 Spacer()
                 
@@ -967,11 +928,210 @@ struct SlotEditorView: View {
                     onSave(updatedSlot)
                 }
                 .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.return, modifiers: [])
             }
             .padding()
         }
-        .frame(width: 500, height: 500)
-        .padding()
+        .frame(width: 500, height: 550)
+        .background(Color(.windowBackgroundColor))
+    }
+    
+    // Предпросмотр слота
+    private var slotPreview: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Preview")
+                .font(.headline)
+            
+            ZStack {
+                // Фон с сеткой
+                Color(.windowBackgroundColor)
+                    .overlay(
+                        GeometryReader { geometry in
+                            ZStack {
+                                // Горизонтальные линии
+                                ForEach(0..<10) { i in
+                                    let y = CGFloat(i) * 20.0
+                                    Path { path in
+                                        path.move(to: CGPoint(x: 0, y: y))
+                                        path.addLine(to: CGPoint(x: geometry.size.width, y: y))
+                                    }
+                                    .stroke(Color.gray.opacity(0.2), lineWidth: 0.5)
+                                }
+                                
+                                // Вертикальные линии
+                                ForEach(0..<10) { i in
+                                    let x = CGFloat(i) * 20.0
+                                    Path { path in
+                                        path.move(to: CGPoint(x: x, y: 0))
+                                        path.addLine(to: CGPoint(x: x, y: geometry.size.height))
+                                    }
+                                    .stroke(Color.gray.opacity(0.2), lineWidth: 0.5)
+                                }
+                            }
+                        }
+                    )
+                
+                // Слот
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.blue.opacity(0.2))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(Color.blue, lineWidth: 2)
+                    )
+                    .frame(width: width / 5, height: height / 5)
+                    .position(x: positionX / 5 + width / 10, y: positionY / 5 + height / 10)
+            }
+            .frame(height: 150)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color.gray.opacity(0.2), lineWidth: 1)
+            )
+        }
+    }
+    
+    // Секция идентификации
+    private var identificationSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Identification")
+                .font(.headline)
+            
+            HStack {
+                Text("ID:")
+                    .frame(width: 80, alignment: .trailing)
+                TextField("ID", text: $slotID)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+            }
+            
+            HStack {
+                Text("Priority:")
+                    .frame(width: 80, alignment: .trailing)
+                Stepper("\(priority)", value: $priority, in: 0...10)
+                    .frame(width: 150)
+                
+                Text("Higher priority slots are filled first")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+    
+    // Секция позиции и размера
+    private var positionAndSizeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Position and Size")
+                .font(.headline)
+            
+            Group {
+                HStack {
+                    Text("X:")
+                        .frame(width: 80, alignment: .trailing)
+                    
+                    HStack(spacing: 0) {
+                        TextField("X", value: $positionX, formatter: NumberFormatter())
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                        
+                        // Кнопки точной настройки
+                        HStack(spacing: 0) {
+                            Button(action: { positionX -= 10 }) {
+                                Image(systemName: "chevron.left")
+                                    .padding(.horizontal, 4)
+                            }
+                            .buttonStyle(.borderless)
+                            
+                            Button(action: { positionX += 10 }) {
+                                Image(systemName: "chevron.right")
+                                    .padding(.horizontal, 4)
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                        .background(Color(.controlBackgroundColor))
+                        .cornerRadius(4)
+                    }
+                }
+                
+                HStack {
+                    Text("Y:")
+                        .frame(width: 80, alignment: .trailing)
+                    
+                    HStack(spacing: 0) {
+                        TextField("Y", value: $positionY, formatter: NumberFormatter())
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                        
+                        // Кнопки точной настройки
+                        HStack(spacing: 0) {
+                            Button(action: { positionY -= 10 }) {
+                                Image(systemName: "chevron.up")
+                                    .padding(.horizontal, 4)
+                            }
+                            .buttonStyle(.borderless)
+                            
+                            Button(action: { positionY += 10 }) {
+                                Image(systemName: "chevron.down")
+                                    .padding(.horizontal, 4)
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                        .background(Color(.controlBackgroundColor))
+                        .cornerRadius(4)
+                    }
+                }
+                
+                HStack {
+                    Text("Width:")
+                        .frame(width: 80, alignment: .trailing)
+                    
+                    HStack(spacing: 0) {
+                        TextField("Width", value: $width, formatter: NumberFormatter())
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                        
+                        // Кнопки точной настройки
+                        HStack(spacing: 0) {
+                            Button(action: { width = max(100, width - 10) }) {
+                                Image(systemName: "minus")
+                                    .padding(.horizontal, 4)
+                            }
+                            .buttonStyle(.borderless)
+                            
+                            Button(action: { width += 10 }) {
+                                Image(systemName: "plus")
+                                    .padding(.horizontal, 4)
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                        .background(Color(.controlBackgroundColor))
+                        .cornerRadius(4)
+                    }
+                }
+                
+                HStack {
+                    Text("Height:")
+                        .frame(width: 80, alignment: .trailing)
+                    
+                    HStack(spacing: 0) {
+                        TextField("Height", value: $height, formatter: NumberFormatter())
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                        
+                        // Кнопки точной настройки
+                        HStack(spacing: 0) {
+                            Button(action: { height = max(80, height - 10) }) {
+                                Image(systemName: "minus")
+                                    .padding(.horizontal, 4)
+                            }
+                            .buttonStyle(.borderless)
+                            
+                            Button(action: { height += 10 }) {
+                                Image(systemName: "plus")
+                                    .padding(.horizontal, 4)
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                        .background(Color(.controlBackgroundColor))
+                        .cornerRadius(4)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -981,8 +1141,18 @@ struct ToastView: View {
     
     var body: some View {
         Text(message)
-            .padding()
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color(.controlBackgroundColor)))
+            .font(.subheadline)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color(.controlBackgroundColor))
+                    .shadow(color: Color.black.opacity(0.2), radius: 5, x: 0, y: 2)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .strokeBorder(Color.gray.opacity(0.2), lineWidth: 1)
+            )
             .padding(.bottom, 20)
     }
 }
